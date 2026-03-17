@@ -1,0 +1,19 @@
+[project]
+name = "customer_communication"
+authors = [
+    { name = "Nikhil Goel", email = "nikhil@email.com"}
+]
+description = "A unified customer journey system for ERPNext showing calls, visits, emails and financials."
+requires-python = ">=3.10"
+readme = "README.md"
+dynamic = ["version"]
+dependencies = [
+    # "frappe~=15.0.0" # depending on which version they are on
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.bench.dev-dependencies]
+# formatting, linting, etc

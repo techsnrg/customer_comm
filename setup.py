@@ -1,6 +1,6 @@
 from setuptools import setup
 
-name = "customer_communication"
+name = "customer_comm"
 
 setup(
 	name=name,

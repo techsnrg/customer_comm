@@ -39,9 +39,18 @@ frappe.pages['customer-journey'].on_page_load = function(wrapper) {
 					<h2>Select a Customer</h2>
 					<p class="text-muted" style="margin: 0; font-size: 13px;" id="cj-summary-text">Search for a customer to view their timeline</p>
 				</div>
-				<div class="cj-search-box" id="cj-customer-search"></div>
+				<div style="display: flex; gap: 15px; align-items: center;">
+					<div id="cj-date-filter" style="display: none; min-width: 150px;"></div>
+					<div class="cj-search-box" id="cj-customer-search"></div>
+				</div>
 			</div>
 			<div class="cj-body" style="display: none;" id="cj-main-body">
+				<div class="cj-comment-box" style="margin-bottom: 20px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #f3f4f6;">
+					<textarea id="cj-new-comment" class="form-control" placeholder="Add a comment or note about this customer..." rows="2" style="resize: none;"></textarea>
+					<div style="text-align: right; margin-top: 10px;">
+						<button id="cj-post-comment" class="btn btn-primary btn-sm">Post Comment</button>
+					</div>
+				</div>
 				<div class="cj-tabs" id="cj-tabs-container">
 					<div class="cj-tab active" data-tab="all">All Activity</div>
 					<div class="cj-tab" data-tab="emails">Emails</div>
@@ -71,6 +80,8 @@ class CustomerJourney {
 
 	setup_ui() {
 		this.setup_customer_field();
+		this.setup_date_filter();
+		this.setup_comment_box();
 		this.setup_tabs();
 	}
 
@@ -86,17 +97,80 @@ class CustomerJourney {
 					let val = this.get_value();
 					if(val) {
 						me.customer = val;
+						me.wrapper.find('#cj-date-filter').show();
 						me.load_customer_data();
 					} else {
 						me.customer = null;
 						me.wrapper.find('#cj-main-body').hide();
+						me.wrapper.find('#cj-date-filter').hide();
 					}
 				}
 			},
 			render_input: true
 		});
-		// Make the input look nicer
 		this.customer_field.$input.css({'border-radius': '6px', 'padding': '8px 12px'});
+	}
+
+	setup_date_filter() {
+		let me = this;
+		this.date_field = frappe.ui.form.make_control({
+			parent: this.wrapper.find('#cj-date-filter'),
+			df: {
+				fieldtype: 'Select',
+				options: 'Last 6 Months\nLast 30 Days\nThis Year\nAll Time',
+				default: 'Last 6 Months',
+				onchange: function() {
+					if(me.customer) {
+						me.load_customer_data();
+					}
+				}
+			},
+			render_input: true
+		});
+		this.date_field.set_input('Last 6 Months');
+	}
+
+	get_date_range() {
+		let val = this.date_field ? this.date_field.get_value() : 'Last 6 Months';
+		let today = frappe.datetime.get_today();
+		let from_date;
+		if(val === 'Last 30 Days') {
+			from_date = frappe.datetime.add_days(today, -30);
+		} else if(val === 'Last 6 Months') {
+			from_date = frappe.datetime.add_months(today, -6);
+		} else if(val === 'This Year') {
+			from_date = frappe.datetime.obj_to_str(new Date(new Date().getFullYear(), 0, 1));
+		} else {
+			from_date = '1970-01-01'; // all time
+		}
+		return { from_date: from_date, to_date: today };
+	}
+
+	setup_comment_box() {
+		let me = this;
+		this.wrapper.find('#cj-post-comment').on('click', function() {
+			let content = me.wrapper.find('#cj-new-comment').val();
+			if(!content) return;
+			
+			let btn = $(this);
+			btn.prop('disabled', true).text('Posting...');
+			
+			frappe.call({
+				method: "customer_comm.customer_comm.page.customer_journey.customer_journey.add_comment",
+				args: {
+					customer: me.customer,
+					content: content
+				},
+				callback: function(r) {
+					btn.prop('disabled', false).text('Post Comment');
+					if(!r.exc) {
+						me.wrapper.find('#cj-new-comment').val('');
+						frappe.show_alert({message: 'Comment added successfully', indicator: 'green'});
+						me.load_customer_data();
+					}
+				}
+			});
+		});
 	}
 
 	setup_tabs() {
@@ -113,9 +187,11 @@ class CustomerJourney {
 		let me = this;
 		this.wrapper.find('#cj-summary-text').text("Loading timeline...");
 		
+		let dates = this.get_date_range();
+
 		frappe.call({
 			method: "customer_comm.customer_comm.page.customer_journey.customer_journey.get_timeline",
-			args: { customer: this.customer },
+			args: { customer: this.customer, from_date: dates.from_date, to_date: dates.to_date },
 			callback: function(r) {
 				if(r.message) {
 					me.events = r.message.events || [];

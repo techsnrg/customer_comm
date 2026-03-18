@@ -1,12 +1,28 @@
 import frappe
 
 @frappe.whitelist()
-def get_timeline(customer):
+def add_comment(customer, content):
+	comment = frappe.get_doc({
+		"doctype": "Comment",
+		"comment_type": "Comment",
+		"reference_doctype": "Customer",
+		"reference_name": customer,
+		"content": content
+	})
+	comment.insert(ignore_permissions=True)
+	return comment.name
+
+@frappe.whitelist()
+def get_timeline(customer, from_date=None, to_date=None):
 	events = []
+	
+	date_filters = {}
+	if from_date and to_date:
+		date_filters["creation"] = ["between", [from_date, to_date + " 23:59:59"]]
 	
 	# 1. Communications (Emails & Calls)
 	comms = frappe.db.get_all("Communication", 
-		filters={"reference_doctype": "Customer", "reference_name": customer},
+		filters={"reference_doctype": "Customer", "reference_name": customer, **date_filters},
 		fields=["name", "communication_type", "communication_medium", "subject", "content", "creation", "sender", "recipients"]
 	)
 	for c in comms:
@@ -29,7 +45,7 @@ def get_timeline(customer):
 
 	# 2. Financials (Sales Orders)
 	orders = frappe.db.get_all("Sales Order",
-		filters={"customer": customer},
+		filters={"customer": customer, **date_filters},
 		fields=["name", "status", "base_grand_total", "creation"]
 	)
 	for o in orders:
@@ -43,7 +59,7 @@ def get_timeline(customer):
 
 	# 3. Financials (Sales Invoice)
 	invoices = frappe.db.get_all("Sales Invoice",
-		filters={"customer": customer},
+		filters={"customer": customer, **date_filters},
 		fields=["name", "status", "base_grand_total", "creation"]
 	)
 	for i in invoices:
@@ -57,7 +73,7 @@ def get_timeline(customer):
 
 	# 4. Comments
 	comments = frappe.db.get_all("Comment",
-		filters={"reference_doctype": "Customer", "reference_name": customer},
+		filters={"reference_doctype": "Customer", "reference_name": customer, **date_filters},
 		fields=["name", "content", "creation", "comment_by"]
 	)
 	for cm in comments:
@@ -71,7 +87,7 @@ def get_timeline(customer):
 
 	# 5. Payment Entries
 	payments = frappe.db.get_all("Payment Entry",
-		filters={"party_type": "Customer", "party": customer, "docstatus": ["<", 2]},
+		filters={"party_type": "Customer", "party": customer, "docstatus": ["<", 2], **date_filters},
 		fields=["name", "payment_type", "base_paid_amount", "creation"]
 	)
 	for p in payments:
@@ -85,7 +101,7 @@ def get_timeline(customer):
 
 	# 6. Activity / Versions (Field Updates)
 	versions = frappe.db.get_all("Version",
-		filters={"ref_doctype": "Customer", "docname": customer},
+		filters={"ref_doctype": "Customer", "docname": customer, **date_filters},
 		fields=["name", "creation", "data", "owner"],
 		limit=50
 	)
